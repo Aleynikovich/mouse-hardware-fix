@@ -1,0 +1,10 @@
+SUBSYSTEM!="input", GOTO="mouse_fix_end"
+KERNEL!="event*", GOTO="mouse_fix_end"
+ENV{ID_INPUT_MOUSE}!="1", GOTO="mouse_fix_end"
+
+# Catch the exact fake vendor ID from our C++ script and skip it
+ATTRS{id/vendor}=="1234", GOTO="mouse_fix_end"
+
+TAG+="systemd", ENV{SYSTEMD_WANTS}+="mouse-hardware-fix@%k.service"
+
+LABEL="mouse_fix_end"
