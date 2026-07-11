@@ -1,15 +1,13 @@
 [Unit]
-Description=Mouse Hardware Fix dynamically attached to %i
-# Tie the lifecycle of this service directly to the hardware being plugged in
+Description=Mouse Hardware Fix dynamically attached to %I
 BindsTo=dev-input-%i.device
 After=dev-input-%i.device
 
 [Service]
 Type=simple
-# %i will be automatically replaced by the event node (e.g., event4)
-ExecStart=/usr/bin/mouse-hardware-fix --device /dev/input/%I
-Restart=always
-RestartSec=1
+EnvironmentFile=-/etc/mouse-hardware-fix.conf
+ExecStart=/usr/bin/mouse-hardware-fix --device /dev/input/%I $EXTRA_ARGS
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
