@@ -15,7 +15,7 @@ You can pass extra arguments to the daemon by modifying the `EXTRA_ARGS` variabl
 * `--scroll-timeout <sec>`: Sets the idle window for scroll direction resets (default: 0.400).
 * `--click-timeout <sec>`: Sets the debounce window for click signals (default: 0.025).
 
-## Installation
+### Installation
 
 ### Arch Linux (AUR)
 Using an AUR helper:
