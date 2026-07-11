@@ -7,7 +7,7 @@ After=dev-input-%i.device
 [Service]
 Type=simple
 # %i will be automatically replaced by the event node (e.g., event4)
-ExecStart=/usr/local/bin/mouse-hardware-fix --device /dev/input/%i
+ExecStart=/usr/bin/mouse-hardware-fix --device /dev/input/%I
 Restart=always
 RestartSec=1
 
