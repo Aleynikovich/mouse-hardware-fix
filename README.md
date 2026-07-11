@@ -2,9 +2,7 @@
 
 A lightweight, plug-and-play C++ daemon for Linux that fixes physical scroll wheel bouncing and mouse button chatter (double-clicking) at the kernel level. This is specifically targeting the pesky Logitech G Pro series:
 
-![alt text](https://github.com/Aleynikovich/mouse-hardware-fix/blob/main/resources/reddit.png "reddit")
-
-
+<img src="https://raw.githubusercontent.com/Aleynikovich/mouse-hardware-fix/main/resources/reddit.png" alt="Reddit Logo" width="400"/>
 ## Configuration
 
 After installation, you can customize the daemon's behavior by editing the global configuration file:
