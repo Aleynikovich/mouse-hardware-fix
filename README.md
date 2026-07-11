@@ -2,6 +2,8 @@
 
 A lightweight, plug-and-play C++ daemon for Linux that fixes physical scroll wheel bouncing and mouse button chatter (double-clicking) at the kernel level.
 
+It has been specifically designed for the pesky Logitech G Pro, notorious for the double clicking issues so it might not work with other mice.
+
 Hardware switches degrade over time, causing scroll wheels to jump in the opposite direction and buttons to register multiple clicks. Instead of throwing away an expensive mouse, this utility intercepts the raw hardware signals, applies a precise software debounce algorithm, and outputs a clean signal through a virtual device.
 
 ## Features
