@@ -1,5 +1,5 @@
 [Unit]
-Description=Mouse Hardware Fix dynamically attached to %I
+Description=Mouse Hardware Fix for /dev/input/%I
 BindsTo=dev-input-%i.device
 After=dev-input-%i.device
 
@@ -8,6 +8,28 @@ Type=simple
 EnvironmentFile=-/etc/mouse-hardware-fix.conf
 ExecStart=/usr/bin/mouse-hardware-fix --device /dev/input/%I $EXTRA_ARGS
 Restart=on-failure
+RestartSec=1
+# Keep pointer input responsive when the system is under load.
+Nice=-10
 
-[Install]
-WantedBy=multi-user.target
+# The daemon only needs its own input node and /dev/uinput.
+DevicePolicy=closed
+DeviceAllow=/dev/input/%I r
+DeviceAllow=/dev/uinput rw
+CapabilityBoundingSet=
+NoNewPrivileges=yes
+PrivateNetwork=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native

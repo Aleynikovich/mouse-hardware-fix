@@ -1,9 +1,20 @@
+# Start mouse-hardware-fix for each physical mouse event node.
+#
+# Skipped: virtual devices (including the clones created by mouse-hardware-fix
+# itself, which live under /devices/virtual), touchpads, pointing sticks,
+# tablets, touchscreens and joysticks. The daemon additionally refuses any
+# device that is not a plain relative mouse, and honours --only <vid:pid>.
+
+ACTION=="remove", GOTO="mouse_fix_end"
 SUBSYSTEM!="input", GOTO="mouse_fix_end"
 KERNEL!="event*", GOTO="mouse_fix_end"
+DEVPATH=="/devices/virtual/*", GOTO="mouse_fix_end"
 ENV{ID_INPUT_MOUSE}!="1", GOTO="mouse_fix_end"
-
-# Catch the exact fake vendor ID from our C++ script and skip it
-ATTRS{id/vendor}=="1234", GOTO="mouse_fix_end"
+ENV{ID_INPUT_TOUCHPAD}=="1", GOTO="mouse_fix_end"
+ENV{ID_INPUT_POINTINGSTICK}=="1", GOTO="mouse_fix_end"
+ENV{ID_INPUT_TABLET}=="1", GOTO="mouse_fix_end"
+ENV{ID_INPUT_TOUCHSCREEN}=="1", GOTO="mouse_fix_end"
+ENV{ID_INPUT_JOYSTICK}=="1", GOTO="mouse_fix_end"
 
 TAG+="systemd", ENV{SYSTEMD_WANTS}+="mouse-hardware-fix@%k.service"
 
