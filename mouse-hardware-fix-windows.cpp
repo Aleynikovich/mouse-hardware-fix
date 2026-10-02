@@ -1,6 +1,8 @@
-// Windows backend: a per-user low-level mouse hook (no driver, no admin
-// rights) that swallows button chatter and wheel bounce from physical input
-// and re-injects corrected events with SendInput.
+// Windows backend: a low-level mouse hook (no driver) that swallows button
+// chatter and wheel bounce from physical input and re-injects corrected
+// events with SendInput. --install registers a scheduled task that starts it
+// elevated at every logon; a Windows service cannot be used because services
+// run in session 0 and never see the interactive desktop's input.
 //
 // Injected input from other software (remote desktop, automation tools, and
 // our own corrections) is never touched.
@@ -13,6 +15,7 @@
 #endif
 #include <windows.h>
 #include <shellapi.h>
+#include <taskschd.h>
 
 #include <cstdarg>
 #include <cstdio>
@@ -28,8 +31,13 @@ namespace {
 
 constexpr wchar_t kWindowClass[] = L"MouseHardwareFixWindow";
 constexpr wchar_t kMutexName[] = L"Local\\MouseHardwareFix";
+constexpr wchar_t kTaskName[] = L"MouseHardwareFix";
+// Older versions autostarted from the Run key; --install/--uninstall clean it up.
 constexpr wchar_t kRunKey[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 constexpr wchar_t kRunValue[] = L"MouseHardwareFix";
+// Defined here so no import library is needed for them.
+constexpr CLSID kClsidTaskScheduler = {0x0f87369f, 0xa4e5, 0x4cfc, {0xbd, 0x3e, 0x73, 0xe6, 0x15, 0x45, 0x72, 0xdd}};
+constexpr IID kIidTaskService = {0x2faba4c7, 0x4da9, 0x4013, {0x96, 0x97, 0x20, 0xcc, 0x3f, 0xd4, 0x0f, 0x85}};
 constexpr UINT kMsgInjectWheel = WM_APP + 1;
 
 enum Button { kLeft, kRight, kMiddle, kX1, kX2, kButtonCount };
@@ -194,8 +202,8 @@ void usage() {
         "  --click-timeout <sec>     chatter window for buttons (default 0.025)\n"
         "  --verbose                 log every corrected event to the console\n"
         "\n"
-        "  --install                 start at login with the given options, and start now\n"
-        "  --uninstall               remove from login and stop the running instance\n"
+        "  --install                 start at every logon (elevated) with the given options, and start now\n"
+        "  --uninstall               remove from logon and stop the running instance\n"
         "  --stop                    stop the running instance\n");
 }
 
@@ -215,25 +223,151 @@ bool stop_running_instance() {
 
 std::wstring quote(const std::wstring& s) { return L"\"" + s + L"\""; }
 
-int install(const std::wstring& args) {
+std::wstring xml_escape(const std::wstring& s) {
+    std::wstring out;
+    for (wchar_t c : s) {
+        switch (c) {
+            case L'&': out += L"&amp;"; break;
+            case L'<': out += L"&lt;"; break;
+            case L'>': out += L"&gt;"; break;
+            case L'"': out += L"&quot;"; break;
+            default: out += c;
+        }
+    }
+    return out;
+}
+
+std::wstring exe_path() {
     wchar_t exe[MAX_PATH];
     GetModuleFileName(nullptr, exe, MAX_PATH);
-    std::wstring cmd = quote(exe) + args;
+    return exe;
+}
 
+bool is_elevated() {
+    HANDLE token;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return false;
+    TOKEN_ELEVATION elevation = {};
+    DWORD size = 0;
+    bool ok = GetTokenInformation(token, TokenElevation, &elevation, sizeof(elevation), &size);
+    CloseHandle(token);
+    return ok && elevation.TokenIsElevated;
+}
+
+// Runs this program again elevated (UAC prompt) and returns its exit code.
+int run_elevated(const std::wstring& args) {
+    std::wstring exe = exe_path();
+    SHELLEXECUTEINFO sei = {};
+    sei.cbSize = sizeof(sei);
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+    sei.lpVerb = L"runas";
+    sei.lpFile = exe.c_str();
+    sei.lpParameters = args.c_str();
+    sei.nShow = SW_HIDE;
+    if (!ShellExecuteEx(&sei) || !sei.hProcess) {
+        if (GetLastError() == ERROR_CANCELLED) std::fprintf(stderr, "Administrator approval is required\n");
+        else std::fprintf(stderr, "Cannot start elevated: %lu\n", GetLastError());
+        return 1;
+    }
+    WaitForSingleObject(sei.hProcess, INFINITE);
+    DWORD code = 1;
+    GetExitCodeProcess(sei.hProcess, &code);
+    CloseHandle(sei.hProcess);
+    std::fprintf(stderr, code == 0 ? "Done\n" : "Failed\n");
+    return static_cast<int>(code);
+}
+
+// Starts at the logon of any member of Users, in that user's own session,
+// with the highest privileges the user has, so elevated windows are filtered
+// too. Parallel instances, because each logged-on user needs their own.
+std::wstring task_xml(const std::wstring& exe, const std::wstring& args) {
+    return LR"(<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Filters scroll wheel bounce and button chatter from worn-out mice.</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger><Enabled>true</Enabled></LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Users">
+      <GroupId>S-1-5-32-545</GroupId>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>Parallel</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <IdleSettings><StopOnIdleEnd>false</StopOnIdleEnd><RestartOnIdle>false</RestartOnIdle></IdleSettings>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>4</Priority>
+    <RestartOnFailure><Interval>PT1M</Interval><Count>3</Count></RestartOnFailure>
+  </Settings>
+  <Actions Context="Users">
+    <Exec>
+      <Command>)" + xml_escape(exe) + LR"(</Command>
+      <Arguments>)" + xml_escape(args) + LR"(</Arguments>
+    </Exec>
+  </Actions>
+</Task>
+)";
+}
+
+// Registers the scheduled task from xml, or deletes it if xml is empty.
+HRESULT update_task(const std::wstring& xml) {
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(hr)) return hr;
+    ITaskService* service = nullptr;
+    ITaskFolder* root = nullptr;
+    BSTR name = SysAllocString(kTaskName);
+    BSTR folder = SysAllocString(L"\\");
+    VARIANT empty;
+    VariantInit(&empty);
+
+    hr = CoCreateInstance(kClsidTaskScheduler, nullptr, CLSCTX_INPROC_SERVER, kIidTaskService,
+                          reinterpret_cast<void**>(&service));
+    if (SUCCEEDED(hr)) hr = service->Connect(empty, empty, empty, empty);
+    if (SUCCEEDED(hr)) hr = service->GetFolder(folder, &root);
+    if (SUCCEEDED(hr) && xml.empty()) {
+        hr = root->DeleteTask(name, 0);
+        if (hr == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND)) hr = S_OK;
+    } else if (SUCCEEDED(hr)) {
+        BSTR definition = SysAllocString(xml.c_str());
+        IRegisteredTask* task = nullptr;
+        hr = root->RegisterTask(name, definition, TASK_CREATE_OR_UPDATE, empty, empty, TASK_LOGON_GROUP, empty, &task);
+        if (task) task->Release();
+        SysFreeString(definition);
+    }
+
+    if (root) root->Release();
+    if (service) service->Release();
+    SysFreeString(folder);
+    SysFreeString(name);
+    CoUninitialize();
+    return hr;
+}
+
+void remove_run_key() {
     HKEY key;
-    if (RegCreateKeyEx(HKEY_CURRENT_USER, kRunKey, 0, nullptr, 0, KEY_SET_VALUE, nullptr, &key, nullptr) != ERROR_SUCCESS) {
-        std::fprintf(stderr, "Cannot open the Run registry key\n");
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, kRunKey, 0, KEY_SET_VALUE, &key) == ERROR_SUCCESS) {
+        RegDeleteValue(key, kRunValue);
+        RegCloseKey(key);
+    }
+}
+
+int install(const std::wstring& args) {
+    if (!is_elevated()) return run_elevated(L"--install" + args);
+
+    std::wstring exe = exe_path();
+    HRESULT hr = update_task(task_xml(exe, args.empty() ? args : args.substr(1)));
+    if (FAILED(hr)) {
+        std::fprintf(stderr, "Cannot register the scheduled task: 0x%08lx\n", static_cast<unsigned long>(hr));
         return 1;
     }
-    LSTATUS r = RegSetValueEx(key, kRunValue, 0, REG_SZ, reinterpret_cast<const BYTE*>(cmd.c_str()),
-                              static_cast<DWORD>((cmd.size() + 1) * sizeof(wchar_t)));
-    RegCloseKey(key);
-    if (r != ERROR_SUCCESS) {
-        std::fprintf(stderr, "Cannot write the Run registry value\n");
-        return 1;
-    }
+    remove_run_key();
 
     stop_running_instance();
+    std::wstring cmd = quote(exe) + args;
     STARTUPINFO si = {};
     si.cb = sizeof(si);
     PROCESS_INFORMATION pi;
@@ -246,12 +380,15 @@ int install(const std::wstring& args) {
 }
 
 int uninstall() {
-    HKEY key;
-    if (RegOpenKeyEx(HKEY_CURRENT_USER, kRunKey, 0, KEY_SET_VALUE, &key) == ERROR_SUCCESS) {
-        RegDeleteValue(key, kRunValue);
-        RegCloseKey(key);
-    }
+    if (!is_elevated()) return run_elevated(L"--uninstall");
+
+    HRESULT hr = update_task(L"");
+    remove_run_key();
     stop_running_instance();
+    if (FAILED(hr)) {
+        std::fprintf(stderr, "Cannot remove the scheduled task: 0x%08lx\n", static_cast<unsigned long>(hr));
+        return 1;
+    }
     std::fprintf(stderr, "Uninstalled\n");
     return 0;
 }
@@ -306,7 +443,8 @@ bool parse_args(int argc, wchar_t** argv, std::wstring& forwarded, int& action) 
 
 int run() {
     HANDLE mutex = CreateMutex(nullptr, TRUE, kMutexName);
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+    // Access is denied when the running instance is elevated and we are not.
+    if (!mutex || GetLastError() == ERROR_ALREADY_EXISTS) {
         std::fprintf(stderr, "mouse-hardware-fix is already running (use --stop first)\n");
         return 1;
     }
@@ -327,6 +465,8 @@ int run() {
     wc.lpszClassName = kWindowClass;
     RegisterClass(&wc);
     g.window = CreateWindowEx(0, kWindowClass, L"mouse-hardware-fix", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, inst, nullptr);
+    // Let a non-elevated --stop close an elevated instance.
+    ChangeWindowMessageFilterEx(g.window, WM_CLOSE, MSGFLT_ALLOW, nullptr);
 
     // Input processing is latency sensitive; the hook runs on this thread.
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);

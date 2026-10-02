@@ -18,10 +18,16 @@ jobs:
         run: cmake --build build --config Release
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
+      - name: Installer
+        if: runner.os == 'Windows'
+        run: |
+          choco install innosetup -y --no-progress
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer\mouse-hardware-fix.iss
       - uses: actions/upload-artifact@v4
         with:
           name: mouse-hardware-fix-${{ runner.os }}
           path: |
             build/mouse-hardware-fix
             build/Release/mouse-hardware-fix.exe
+            build/mouse-hardware-fix-setup.exe
           if-no-files-found: ignore

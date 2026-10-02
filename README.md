@@ -71,31 +71,36 @@ sudo systemctl daemon-reload && sudo udevadm control --reload-rules
 
 ## Windows
 
-On Windows it runs as a small background program per user, using a low-level mouse hook. There's no driver and no admin rights. Corrected events are re-injected with `SendInput`. Input injected by other software (remote desktop, AutoHotkey and so on) is never touched.
+On Windows it runs as a small background program in your session, using a low-level mouse hook. There's no driver. Corrected events are re-injected with `SendInput`. Input injected by other software (remote desktop, AutoHotkey and so on) is never touched.
+
+### Install
+Download `mouse-hardware-fix-setup.exe` from the [build artifacts](https://github.com/Aleynikovich/mouse-hardware-fix/actions) and run it. You can enter [options](#options) on the way. Setup installs to `Program Files` and registers a scheduled task (`MouseHardwareFix` in Task Scheduler) that starts the fix at every logon, with administrator rights where the user has them, so elevated windows are filtered too. It also starts the fix immediately. To change options, run setup again. Uninstall from *Settings → Apps*.
+
+It is a logon task and not a Windows service on purpose. Services run in an isolated session and can't see your desktop's mouse input.
 
 ### Build
 With Visual Studio (Developer PowerShell) or MinGW:
 ```powershell
 cmake -B build
 cmake --build build --config Release
+iscc installer\mouse-hardware-fix.iss     # optional: builds build\mouse-hardware-fix-setup.exe (Inno Setup 6)
 ```
 or directly with MSVC:
 ```powershell
-cl /O2 /EHsc /std:c++17 mouse-hardware-fix-windows.cpp /Fe:mouse-hardware-fix.exe /link /SUBSYSTEM:WINDOWS user32.lib advapi32.lib shell32.lib
+cl /O2 /EHsc /std:c++17 mouse-hardware-fix-windows.cpp /Fe:mouse-hardware-fix.exe /link /SUBSYSTEM:WINDOWS user32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib
 ```
 
-### Use
+### Use without the installer
 ```powershell
 .\mouse-hardware-fix.exe --verbose          # try it out, logs corrections to the console
-.\mouse-hardware-fix.exe --install          # start at every login (with any options you add) and start now
+.\mouse-hardware-fix.exe --install          # start at every logon (with any options you add) and start now
 .\mouse-hardware-fix.exe --stop             # stop the running instance
-.\mouse-hardware-fix.exe --uninstall        # remove from login and stop
+.\mouse-hardware-fix.exe --uninstall        # remove from logon and stop
 ```
-`--install` stores the command line in `HKCU\...\CurrentVersion\Run`. To change options, run `--install` again with the new flags. Keep the `.exe` in a permanent location before you install it.
+`--install` and `--uninstall` ask for administrator approval. `--install` registers the same logon task as setup, using the `.exe` where it is, so put it somewhere permanent that only administrators can write to (such as `Program Files`) first. To change options, run `--install` again with the new flags.
 
 Limitations of a user-mode hook:
 * The hook sees all mice combined. It can't target a single device the way `--only` does on Linux.
-* Windows doesn't let a non-elevated program filter input aimed at elevated (administrator) windows. Start it from an elevated prompt if you need that.
 * Games that read raw input directly may still see the original, unfiltered events.
 
 ## Options

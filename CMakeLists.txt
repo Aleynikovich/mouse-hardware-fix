@@ -9,6 +9,7 @@ endif()
 
 if(WIN32)
   add_executable(mouse-hardware-fix WIN32 mouse-hardware-fix-windows.cpp)
+  target_link_libraries(mouse-hardware-fix PRIVATE ole32 oleaut32)
   if(MINGW)
     target_link_options(mouse-hardware-fix PRIVATE -municode -static)
   endif()
