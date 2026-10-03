@@ -11,7 +11,7 @@ It mainly targets the Logitech G Pro series, but works with any mouse:
 
 ## How it works
 
-**Clicks.** Presses go through immediately, so clicking has no extra latency. Each release is held back for a short window (25 ms by default). If the switch bounces back to "pressed" during that window, the bounce and the release are both discarded. This removes ghost double clicks when you click and when you let go, and drags and held buttons don't get interrupted by chatter partway through. Real double clicks are far slower than 25 ms and are unaffected.
+**Clicks.** Presses go through immediately, so clicking has no extra latency. Each release is held back for a short window (50 ms by default). If the switch bounces back to "pressed" during that window, the bounce and the release are both discarded. This removes ghost double clicks when you click and when you let go, and drags and held buttons don't get interrupted by chatter partway through. Real double clicks are far slower than 50 ms and are unaffected.
 
 **Scrolling.** While you are scrolling, a single step in the opposite direction is treated as encoder bounce. By default it is *inverted* rather than dropped, so scrolling keeps a steady pace without a hitch. If the wheel keeps turning the other way (2 notches by default), it counts as a real reversal. Any pause longer than 300 ms ends the gesture, so reversing after a short pause is always instant. High-resolution wheels are measured in fractions of a notch, so they behave the same as normal wheels.
 
@@ -112,7 +112,7 @@ Limitations of a user-mode hook:
 | `--scroll-timeout <sec>` | `0.300` | Pause that ends a scroll gesture. After it, any direction is accepted immediately. |
 | `--scroll-reversal <n>` | `2` | Notches the wheel must keep turning the other way mid-gesture before it counts as a real reversal. |
 | `--scroll-drop` | | Drop bounced wheel steps instead of inverting them. |
-| `--click-timeout <sec>` | `0.025` | Chatter window. Raise it if double clicks still slip through, lower it if you jitter-click. |
+| `--click-timeout <sec>` | `0.050` | Chatter window. Raise it if double clicks still slip through, lower it if you jitter-click. |
 | `--verbose` | | Log every corrected event. |
 | `--only <vid:pid>` | | **Linux only.** Handle only this device (repeatable). |
 | `--device <path>` | | **Linux only.** The evdev node, normally supplied by the udev rule. |

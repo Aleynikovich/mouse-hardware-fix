@@ -147,7 +147,7 @@ struct Options {
     bool click_fix = true;
     bool verbose = false;
     ScrollFilter::Config scroll;
-    Micros click_window = 25000;
+    Micros click_window = 50000;
 };
 
 // Parses a duration in seconds (e.g. "0.025"). Returns false on bad input.

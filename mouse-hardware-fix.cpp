@@ -68,7 +68,7 @@ void usage(const char* argv0) {
         "  --scroll-timeout <sec>    pause that ends a scroll gesture (default 0.300)\n"
         "  --scroll-reversal <n>     notches needed to accept a mid-gesture reversal (default 2)\n"
         "  --scroll-drop             drop bounced wheel steps instead of inverting them\n"
-        "  --click-timeout <sec>     chatter window for buttons (default 0.025)\n"
+        "  --click-timeout <sec>     chatter window for buttons (default 0.050)\n"
         "  --only <vid:pid>          only handle this device (hex, repeatable)\n"
         "  --verbose                 log every corrected event\n",
         argv0);
